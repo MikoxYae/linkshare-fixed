@@ -714,24 +714,24 @@ async def check_fsub_sets(client, user_id: int, token_key: str) -> tuple:
         return False, buttons, set_id
 
     # All sets exhausted (all completed, all grace periods expired)
-      # Restart cycle from Set 1 — force user to re-verify membership
-      if sets:
-          first = sets[0]
-          first_id = first["set_id"]
-          restart_buttons: list = []
-          for ch in first.get("channels", []):
-              ch_id    = ch["channel_id"]
-              req_mode = ch.get("request_mode", False)
-              join_link = await _get_fsub_invite_link(client, ch_id, req_mode)
-              if join_link:
-                  if req_mode:
-                      await record_join_req_sent(user_id, ch_id)
-                  try:
-                      _chat = await client.get_chat(ch_id)
-                      _ch_name = f"Join {_chat.title[:22]}"
-                  except Exception:
-                      _ch_name = "Join Channel"
-                  restart_buttons.append([InlineKeyboardButton(_ch_name, url=join_link)])
-          if restart_buttons:
-              return False, restart_buttons, first_id
-      return True, [], 0
+    # Restart cycle from Set 1 — force user to re-verify membership
+    if sets:
+        first = sets[0]
+        first_id = first["set_id"]
+        restart_buttons: list = []
+        for ch in first.get("channels", []):
+            ch_id    = ch["channel_id"]
+            req_mode = ch.get("request_mode", False)
+            join_link = await _get_fsub_invite_link(client, ch_id, req_mode)
+            if join_link:
+                if req_mode:
+                    await record_join_req_sent(user_id, ch_id)
+                try:
+                    _chat = await client.get_chat(ch_id)
+                    _ch_name = f"Join {_chat.title[:22]}"
+                except Exception:
+                    _ch_name = "Join Channel"
+                restart_buttons.append([InlineKeyboardButton(_ch_name, url=join_link)])
+        if restart_buttons:
+            return False, restart_buttons, first_id
+    return True, [], 0
