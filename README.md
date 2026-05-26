@@ -272,55 +272,197 @@ Check Set 02 ──► and so on...
 
 <img src="https://user-images.githubusercontent.com/73097560/115834477-dbab4500-a447-11eb-908a-139a6edaec5c.gif">
 
-## 🚀 Setup
+## 🚀 sᴇᴛᴜᴘ
 
-### Requirements
-- Python 3.11+
-- MongoDB Atlas (or local MongoDB)
-- Telegram API credentials → [my.telegram.org](https://my.telegram.org)
-- Bot token → [@BotFather](https://t.me/BotFather)
+<details>
+<summary><b>📋 Step 1 — Prerequisites</b></summary>
+<br>
 
-### Environment Variables
+> Make sure you have everything ready before starting.
 
-| Variable | Required | Description |
-|----------|:--------:|-------------|
-| `TG_BOT_TOKEN` | ✅ | Bot Token from @BotFather |
-| `APP_ID` | ✅ | Telegram API ID |
-| `API_HASH` | ✅ | Telegram API Hash |
-| `OWNER_ID` | ✅ | Your Telegram User ID |
-| `ADMINS` | ✅ | Space-separated admin IDs |
-| `DB_URI` | ✅ | MongoDB connection URI |
-| `DB_NAME` | ✅ | Database name (default: `crunchyroll_bot`) |
-| `DATABASE_CHANNEL` | ✅ | Telegram channel ID for DB storage |
-| `CHAT_ID` | ⬜ | Force-sub channel IDs |
-| `PORT` | ⬜ | Web server port (default: `8000`) |
-| `REVOKE_TIME` | ⬜ | Link expiry in seconds (default: `1800`) |
-| `DELETE_TIME` | ⬜ | Message delete delay in seconds (default: `1740`) |
-| `TG_BOT_WORKERS` | ⬜ | Pyrogram workers (default: `40`) |
+| Requirement | Where to Get |
+|-------------|-------------|
+| **Python 3.11+** | [python.org/downloads](https://python.org/downloads) |
+| **MongoDB Atlas** (free) | [mongodb.com/atlas](https://www.mongodb.com/atlas) |
+| **Telegram API ID & Hash** | [my.telegram.org](https://my.telegram.org) |
+| **Bot Token** | [@BotFather](https://t.me/BotFather) on Telegram |
+| **Your Telegram User ID** | [@userinfobot](https://t.me/userinfobot) on Telegram |
 
-### Installation
+**Getting your API ID & Hash:**
+```
+1. Go to https://my.telegram.org
+2. Log in with your phone number
+3. Click "API Development Tools"
+4. Create a new app → copy APP_ID and API_HASH
+```
 
+**Getting your Bot Token:**
+```
+1. Open Telegram → search @BotFather
+2. Send /newbot → follow the steps
+3. Copy the token (format: 123456:ABCdef...)
+```
+
+</details>
+
+---
+
+<details>
+<summary><b>🔐 Step 2 — Environment Variables</b></summary>
+<br>
+
+> Set these before running the bot. Required ones must be filled, optional ones have defaults.
+
+**✅ Required:**
+
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `TG_BOT_TOKEN` | Bot Token from @BotFather | `123456:ABCdef...` |
+| `APP_ID` | Telegram API ID | `12345678` |
+| `API_HASH` | Telegram API Hash | `abcdef1234567890...` |
+| `OWNER_ID` | Your Telegram User ID | `123456789` |
+| `ADMINS` | Space-separated admin IDs | `123456789 987654321` |
+| `DB_URI` | MongoDB connection URI | `mongodb+srv://user:pass@cluster...` |
+| `DB_NAME` | MongoDB database name | `crunchyroll_bot` |
+| `DATABASE_CHANNEL` | Telegram channel ID for DB | `-1001234567890` |
+
+**⬜ Optional (have defaults):**
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `CHAT_ID` | — | Force-sub channel IDs |
+| `PORT` | `8000` | Web server port |
+| `REVOKE_TIME` | `1800` | Link expiry in seconds (30 min) |
+| `DELETE_TIME` | `1740` | Message delete delay in seconds (29 min) |
+| `TG_BOT_WORKERS` | `40` | Pyrogram parallel workers |
+| `APPROVED_WELCOME` | `off` | Auto-approve welcome (`on`/`off`) |
+| `START_PIC` | Bot image | Custom start photo URL |
+
+**Create a `.env` file:**
+```env
+TG_BOT_TOKEN=your_bot_token_here
+APP_ID=your_api_id
+API_HASH=your_api_hash
+OWNER_ID=your_telegram_id
+ADMINS=your_telegram_id
+DB_URI=mongodb+srv://username:password@cluster.mongodb.net/
+DB_NAME=crunchyroll_bot
+DATABASE_CHANNEL=-1001234567890
+```
+
+</details>
+
+---
+
+<details>
+<summary><b>⚙️ Step 3 — Installation & Run</b></summary>
+<br>
+
+> Clone, install dependencies, and start the bot.
+
+**Clone the repository:**
 ```bash
 git clone https://github.com/MikoxYae/linkshare-fixed
 cd linkshare-fixed
+```
+
+**Install dependencies:**
+```bash
 pip install -r requirements.txt
+```
+
+**Run the bot:**
+```bash
 python main.py
 ```
 
-### Requirements File
+**Dependencies (`requirements.txt`):**
 ```
-pyrofork
-TgCrypto
-pyromod
-python-dotenv
-pymongo
-dnspython
-motor
-aiohttp
-asyncio
-aiofiles
-psutil
+pyrofork       # Pyrogram fork with extra features
+TgCrypto       # Fast encryption for Telegram
+pyromod        # Pyrogram conversation handler
+python-dotenv  # Load .env file
+pymongo        # MongoDB driver
+dnspython      # DNS resolver for MongoDB Atlas
+motor          # Async MongoDB driver
+aiohttp        # Async web server (keep-alive)
+asyncio        # Async support
+aiofiles       # Async file operations
+psutil         # System stats
 ```
+
+</details>
+
+---
+
+<details>
+<summary><b>🤖 Step 4 — Bot Configuration</b></summary>
+<br>
+
+> After the bot starts, do these steps inside Telegram.
+
+**1. Make bot admin in your channels:**
+```
+Go to your channel → Admins → Add Admin → Add your bot
+Give permissions:
+  ✅ Invite Users via Link
+  ✅ Manage Chat
+  (for request-mode: ✅ Add New Admins)
+```
+
+**2. Add your first channel:**
+```
+Open your bot in Telegram
+Send: /addchannel
+Follow the instructions
+```
+
+**3. Generate a shareable link:**
+```
+Send: /genlink
+Select your channel
+Share the generated link with your users
+```
+
+**4. Set up Force Subscribe (optional):**
+```
+Send: /fsubsets
+Create a new set → Add channels
+Set grace time as needed
+Enable fsub from the panel
+```
+
+**5. Customize bot messages:**
+```
+Send: /customize
+Change start image, caption, button text — all from the panel
+```
+
+</details>
+
+---
+
+<details>
+<summary><b>☁️ Deploy on Replit (Recommended)</b></summary>
+<br>
+
+> Fastest way to host — no server needed.
+
+```
+1. Fork this repo on GitHub
+2. Go to replit.com → New Repl → Import from GitHub
+3. Add all environment variables in Replit Secrets tab
+4. Click Run ▶
+```
+
+| Platform | Difficulty | Cost |
+|----------|-----------|------|
+| **Replit** | ⭐ Easy | Free tier available |
+| **Railway** | ⭐⭐ Medium | Free tier available |
+| **VPS (Ubuntu)** | ⭐⭐⭐ Advanced | Paid |
+| **Heroku** | ⭐⭐ Medium | Paid |
+
+</details>
 
 ---
 
