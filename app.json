@@ -1,0 +1,48 @@
+{
+  "name": "Crunchyroll Link Provider Bot",
+  "description": "A professional Telegram bot that provides temporary, revocable invite links for anime channels — protecting them from copyright reports.",
+  "keywords": ["telegram", "anime", "link", "protection", "crunchyroll"],
+  "repository": "",
+  "logo": "https://ibb.co/FgPVtzw",
+  "env": {
+    "TG_BOT_TOKEN": {
+      "description": "Your Bot token from @BotFather",
+      "value": ""
+    },
+    "OWNER_ID": {
+      "description": "Your Telegram user ID (integer)",
+      "value": "6040503076"
+    },
+    "APP_ID": {
+      "description": "Your Telegram API ID from my.telegram.org",
+      "value": "22768311"
+    },
+    "API_HASH": {
+      "description": "Your Telegram API Hash from my.telegram.org",
+      "value": "702d8884f48b42e865425391432b3794"
+    },
+    "DB_URI": {
+      "description": "MongoDB connection URL",
+      "value": "mongodb+srv://link:link0123@cluster0.wm6zb7x.mongodb.net/?appName=Cluster0"
+    },
+    "DB_NAME": {
+      "description": "MongoDB database name",
+      "value": "crunchyroll_bot"
+    },
+    "PORT": {
+      "description": "Web server port",
+      "value": "4231"
+    }
+  },
+  "buildpacks": [
+    {
+      "url": "heroku/python"
+    }
+  ],
+  "formation": {
+    "worker": {
+      "quantity": 1,
+      "size": "basic"
+    }
+  }
+}
