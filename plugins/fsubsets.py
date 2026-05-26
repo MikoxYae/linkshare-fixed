@@ -620,26 +620,31 @@ async def check_fsub_sets(client, user_id: int, token_key: str) -> tuple:
 
     Cascade rules (sets processed in order — Set 01, Set 02, …):
 
-      1. grace active for this set
-         → PASS right now; don't even look at later sets yet.
-            The user earned this grace by joining; next time grace expires
-            the next set will be checked.
+      1. Grace active for this set
+         → PASS immediately. Deliver link.
 
-      2. pass_time recorded but grace expired
-         → User already completed this set in a previous session.
-            Advance silently to the next set.
+      2. Grace expired OR never completed
+         → RE-CHECK membership for ALL channels in this set right now.
 
-      3. pass_time = None (never completed) AND all channels joined
-         → User just finished this set for the first time.
-            Return (True, [], set_id) so the caller records the pass and
-            starts the grace timer.
+         2a. Some channels unjoined / no pending request
+             → Show ALL unjoined channels as join buttons. Return False.
 
-      4. pass_time = None AND some channels still unjoined
-         → Show ALL unjoined channels from this set as join buttons.
-            Return (False, buttons, set_id).
+         2b. All channels joined, pass_time = None (first time completing)
+             → Return (True, [], set_id) — caller records pass + starts grace.
 
-    When all sets are exhausted (all previously completed + grace expired):
-      → Return (True, [], 0).
+         2c. All channels joined, pass_time already recorded (re-verified)
+             → Advance to next set silently.
+
+    When all sets exhausted → Return (True, [], 0).
+
+    KEY FIXES vs old version:
+      - leave detection: after grace expires we always re-check membership
+        so users who left get caught and must re-join (old code just skipped).
+      - all channels shown: fallback button added even when invite link
+        generation fails so no channel silently disappears.
+      - no slow API iteration: removed has_pending_join_request() call
+        (iterates ALL pending requests — hits Telegram limits on big channels).
+        We rely only on the fast DB cache.
     """
     sets  = await get_all_fsub_sets()
     cfg   = await get_fsub_set_config()
@@ -648,90 +653,86 @@ async def check_fsub_sets(client, user_id: int, token_key: str) -> tuple:
     if not sets:
         return True, [], 0
 
-    from helper_func import is_sub, has_pending_join_request
+    from helper_func import is_sub
     from database.database import has_join_req_cache, record_join_req_sent, clear_join_req_cache
     import asyncio as _aio
 
-    # ── Build membership status for every set ────────────────────────────────
-    unjoined_by_set: list[list] = []
-    for set_doc in sets:
-        unjoined: list = []
-        for ch in set_doc.get("channels", []):
-            req_mode  = ch.get("request_mode", False)
-            ch_id_val = ch["channel_id"]
+    async def _build_buttons(unjoined_channels: list) -> list:
+        """Build join buttons for all unjoined channels with fallback."""
+        buttons: list = []
+        for ch in unjoined_channels:
+            ch_id    = ch["channel_id"]
+            req_mode = ch.get("request_mode", False)
 
-            _mem = await is_sub(client, user_id, ch_id_val)
-            if _mem and req_mode:
-                _aio.create_task(clear_join_req_cache(user_id, ch_id_val))
-            if not _mem:
+            # Get channel name
+            try:
+                _chat    = await client.get_chat(ch_id)
+                ch_title = _chat.title[:22]
+            except Exception:
+                ch_title = "Channel"
+
+            icon     = "📨" if req_mode else "⚡"
+            btn_text = f"{icon} Join {ch_title}"
+
+            join_link = await _get_fsub_invite_link(client, ch_id, req_mode)
+            if join_link:
                 if req_mode:
-                    _mem = await has_join_req_cache(user_id, ch_id_val)
-                    if not _mem:
-                        _mem = await has_pending_join_request(client, ch_id_val, user_id)
-            if not _mem:
-                unjoined.append(ch)
-        unjoined_by_set.append(unjoined)
+                    await record_join_req_sent(user_id, ch_id)
+                buttons.append([InlineKeyboardButton(btn_text, url=join_link)])
+            else:
+                # Link generation failed (bot not admin?) — still show button
+                # so user knows which channel is required
+                buttons.append([InlineKeyboardButton(f"⚠️ {btn_text}", url="https://t.me")])
+        return buttons
 
     # ── Cascade through sets ─────────────────────────────────────────────────
-    for i, set_doc in enumerate(sets):
-        set_id    = set_doc["set_id"]
-        unjoined  = unjoined_by_set[i]
-        all_joined = (len(unjoined) == 0)
+    for set_doc in sets:
+        set_id   = set_doc["set_id"]
+        channels = set_doc.get("channels", [])
 
-        # Always use "global" key so grace periods apply across all links
+        # Rule 1 — grace is still active → pass immediately
         grace_valid = await is_set_pass_valid(user_id, "global", set_id, grace)
-        pass_time   = await get_set_pass_time(user_id, "global", set_id)
-
-        # Rule 1 — grace is still active → pass immediately, stop here
         if grace_valid:
             return True, [], 0
 
-        # Rule 2 — was completed before, grace now expired → skip to next set
-        if pass_time is not None:
+        # ── Re-check membership NOW (grace expired or first visit) ────────────
+        # FIX: old code skipped sets with pass_time without re-checking,
+        # allowing users who left channels to bypass force-sub after grace.
+        unjoined: list = []
+        for ch in channels:
+            ch_id    = ch["channel_id"]
+            req_mode = ch.get("request_mode", False)
+
+            is_member = await is_sub(client, user_id, ch_id)
+
+            if is_member:
+                # Full member — clear stale request cache if any
+                if req_mode:
+                    _aio.create_task(clear_join_req_cache(user_id, ch_id))
+                continue  # this channel is fine
+
+            # Not a full member — for request-mode channels check DB cache
+            # (cache records that WE sent them a join-request link; fast O(1) lookup)
+            if req_mode and await has_join_req_cache(user_id, ch_id):
+                continue  # request was sent — treat as pending/OK
+
+            # Neither member nor pending request → must join
+            unjoined.append(ch)
+
+        if unjoined:
+            # Rule 2a — some channels still unjoined → show ALL of them
+            buttons = await _build_buttons(unjoined)
+            return False, buttons, set_id
+
+        # All channels in this set are joined / have pending request
+        pass_time = await get_set_pass_time(user_id, "global", set_id)
+
+        if pass_time is None:
+            # Rule 2b — first time completing this set → deliver link
+            return True, [], set_id
+        else:
+            # Rule 2c — re-verified after grace expiry → advance to next set
             continue
 
-        # Rules 3 & 4 — never completed this set
-        if all_joined:
-            # Rule 3: just completed → caller records pass + delivers link
-            return True, [], set_id
-
-        # Rule 4: some channels still unjoined → show ALL of them
-        buttons: list = []
-        for ch in unjoined:
-            ch_id    = ch["channel_id"]
-            req_mode = ch.get("request_mode", False)
-            join_link = await _get_fsub_invite_link(client, ch_id, req_mode)
-            if join_link:
-                if req_mode:
-                    await record_join_req_sent(user_id, ch_id)
-                try:
-                    _chat = await client.get_chat(ch_id)
-                    _ch_name = f"Join {_chat.title[:22]}"
-                except Exception:
-                    _ch_name = "Join Channel"
-                buttons.append([InlineKeyboardButton(_ch_name, url=join_link)])
-
-        return False, buttons, set_id
-
-    # All sets exhausted (all completed, all grace periods expired)
-    # Restart cycle from Set 1 — force user to re-verify membership
-    if sets:
-        first = sets[0]
-        first_id = first["set_id"]
-        restart_buttons: list = []
-        for ch in first.get("channels", []):
-            ch_id    = ch["channel_id"]
-            req_mode = ch.get("request_mode", False)
-            join_link = await _get_fsub_invite_link(client, ch_id, req_mode)
-            if join_link:
-                if req_mode:
-                    await record_join_req_sent(user_id, ch_id)
-                try:
-                    _chat = await client.get_chat(ch_id)
-                    _ch_name = f"Join {_chat.title[:22]}"
-                except Exception:
-                    _ch_name = "Join Channel"
-                restart_buttons.append([InlineKeyboardButton(_ch_name, url=join_link)])
-        if restart_buttons:
-            return False, restart_buttons, first_id
+    # All sets exhausted (all verified) → deliver link
     return True, [], 0
